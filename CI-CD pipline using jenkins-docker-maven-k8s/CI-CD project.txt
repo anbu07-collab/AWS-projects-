@@ -1,0 +1,177 @@
+A. Create a server with SG and name jenkins-server ( ubuntu 22.04 for both server)
+step-1: 
+Install java(17) and Jenkins and start Jenkins
+java:  
+
+sudo apt update
+sudo apt install fontconfig openjdk-17-jre
+java -version
+
+Jenkins: 
+
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo tee \
+  /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+
+echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+  https://pkg.jenkins.io/debian-stable binary/ | \
+  sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+sudo apt update -y
+sudo apt install jenkins -y
+
+sudo systemctl start jenkins
+sudo systemctl enable jenkins
+sudo systemctl status jenkins
+
+
+copy public Ip address add (:8080)
+unlock the Jenkins web and install suggested plugins, sign up using name, pw and gmail
+Git is already installed in Jenkins-server, for maven
+Go to Jenkins web, in setting go to tools, at end
+given name to maven and install
+
+Step-2:
+NOW install Docker in server-1
+add Jenkins user to grp
+restart the Jenkins and check version in web also relogin
+
+curl -fsSL get.docker.com | /bin/bash
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
+sudo docker version
+
+Step-3:
+Create one more server with SG and name EKS host 
+>Install kubectl (v1.19.6)
+
+curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.19.6/2021-01-05/bin/linux/amd64/kubectl
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin
+kubectl version --short --client
+
+>install AWS cli
+
+sudo apt install unzip 
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+aws --version
+
+>Install ekcsctl
+
+curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+sudo mv /tmp/eksctl /usr/local/bin
+eksctl version
+
+Step-4:
+
+Create a role with administration access(easy) and use case is EC2
+Add that role to both server in security and modify role 
+
+Step-5
+>Create EKS Cluster using eksctl
+
+eksctl create cluster --name ashokit-cluster --region ap-south-1 --node-type t2.medium  --zones ap-south-1a,ap-south-1b
+
+Change name if u want and give region ur using.
+It will take 10-15 mins
+check with 
+
+kubectl get nodes                       >>>>> u will see 2 nodes ready
+
+Step-6
+>Go to server-1 
+install awscli and kubectl by using same cmds.
+
+Step-7:
+In server-2, go to
+
+cat .kube/config
+
+copy the whole file
+In server-1:
+
+ cd /var/lib/jenkins
+ sudo mkdir .kube
+ sudo vi .kube/config
+ 
+paste the file here from apiversion to false
+
+___________________________________________________
+ 
+This is for installation and now in Jenkins server from 27:00
+
+Git repo:   https://github.com/ashokitschool/DevOps-Documents/blob/main/10-Jenkins-Docker-K8S.md
+
+Git maven repo:      https://github.com/ashokitschool/maven-web-app.git
+
+
+
+After doing copy paste of cluster file u got error try this
+____________________________________________
+
+You must ensure Jenkins user is reading the correct kubeconfig file.
+
+Run this EXACT set of commands:
+1️⃣ Fix file permissions
+sudo chown -R jenkins:jenkins /var/lib/jenkins/.kube
+sudo chmod 600 /var/lib/jenkins/.kube/config
+
+2️⃣ Verify Jenkins user can read the config
+sudo -u jenkins cat /var/lib/jenkins/.kube/config
+
+
+You should see the cluster config (certificate-authority-data, server URL, etc.)
+
+3️⃣ Test kubectl as Jenkins user
+sudo -u jenkins kubectl get nodes
+
+
+
+
+THE FINAL CODE:
+
+pipeline {
+    agent any
+
+tools{
+    maven'maven-3.9.11'
+}
+    stages {
+        stage('clone repo') {
+            steps {
+                git 'https://github.com/ashokitschool/maven-web-app.git'
+            }
+        }
+        stage('Maven build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        stage('Docker Image') {
+            steps {
+                sh 'docker build -t ashokit/mavenwebapp .'
+            }
+        }
+     stage('k8s deployment') {
+            steps {
+                sh 'kubectl apply -f k8s-deploy.yml'
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
